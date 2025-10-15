@@ -2,136 +2,179 @@
 <html lang="id">
 <head>
 <meta charset="utf-8" />
-<title>UTM 49S XYZ → CesiumJS | DTM Binned + Buildings</title>
+<title>Poseidon WebGIS — UTM 49S XYZ → DTM</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="stylesheet" href="https://unpkg.com/cesium/Build/Cesium/Widgets/widgets.css">
 <script>window.CESIUM_BASE_URL="https://unpkg.com/cesium/Build/Cesium/";</script>
 <script src="https://unpkg.com/cesium/Build/Cesium/Cesium.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.1/dist/proj4.js"></script>
 <style>
-  html,body,#app{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0f19;color:#eaeef6}
-  #toolbar{position:absolute;z-index:10;top:12px;left:12px;right:12px;background:rgba(18,24,38,.92);border:1px solid #1f2a44;border-radius:12px;padding:12px;display:grid;gap:10px}
-  #toolbar .row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
-  #toolbar label{font-size:12px;opacity:.9}
-  #toolbar input,#toolbar select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2a385e;background:#0f1526;color:#eaeef6}
-  #toolbar input[type=file]{color:#9fb3ff}
-  #toolbar button{background:linear-gradient(180deg,#3b82f6,#2563eb);border:none;color:#fff;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:600}
-  #toolbar button.secondary{background:#223055}
-  #toolbar .small{font-size:12px;opacity:.85}
-  #status{font-size:12px;color:#9fb3ff}
-  #cesiumContainer{position:absolute;inset:0}
-  .chip{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #2a385e;background:#0f1526;font-size:12px}
+  :root{ --sidebar-w: 340px; }
+  html,body{height:100%;margin:0;background:#0b0f19;color:#eaeef6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  #layout{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:100%;height:100%}
+  /* Sidebar */
+  #sidebar{background:#0d1324;border-right:1px solid #1f2a44;display:flex;flex-direction:column;min-width:280px;max-width:520px}
+  #brand{display:flex;align-items:center;gap:10px;padding:14px 14px;border-bottom:1px solid #1f2a44}
+  #brand img{width:28px;height:28px;object-fit:contain}
+  #brand h1{font-size:14px;margin:0;color:#c7d2fe;letter-spacing:.3px}
+  #controls{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+  .card{border:1px solid #1f2a44;border-radius:12px;background:#0f1526;padding:12px}
+  .card h3{margin:0 0 10px 0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#9fb3ff}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label{font-size:12px;opacity:.9}
+  input,select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2a385e;background:#0b1120;color:#eaeef6}
+  input[type=file]{color:#9fb3ff}
+  .btn{background:linear-gradient(180deg,#3b82f6,#2563eb);border:none;color:#fff;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:600}
+  .btn.secondary{background:#223055}
+  .stack{display:flex;flex-wrap:wrap;gap:8px}
   .switch{display:flex;gap:8px;align-items:center}
+  .muted{font-size:12px;opacity:.8}
+  .status{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #2a385e;background:#0b1120;font-size:12px;color:#9fb3ff}
+  /* Map panel */
+  #map{position:relative}
+  #cesiumContainer{position:absolute;inset:0}
+  /* Popup */
   #popup{position:absolute;z-index:20;min-width:220px;max-width:320px;background:rgba(14,18,30,.98);border:1px solid #223055;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.35);padding:10px;display:none;pointer-events:none}
   #popup h4{margin:0 0 6px 0;font-size:13px;color:#c7d2fe}
-  #popup .row{font-size:12px;display:flex;justify-content:space-between;gap:8px}
+  #popup .rowp{font-size:12px;display:flex;justify-content:space-between;gap:8px}
+  /* Legend: mengambang di kanan bawah map */
   #legend{position:absolute;right:12px;bottom:12px;z-index:15;background:rgba(18,24,38,.92);border:1px solid #1f2a44;border-radius:10px;padding:10px}
   #legend h5{margin:0 0 6px 0;font-size:12px;color:#c7d2fe}
-  #legend canvas{display:block}
+  #legend canvas{display:block;border:1px solid #1f2a44;border-radius:8px;background:#0b1120}
+  #legend .muted{margin-top:6px}
+  /* Sembunyikan watermark Cesium */
+  .cesium-widget-credits{display:none !important}
+
+  #brand img.poseidon-logo {
+  height: 70px;          /* atur besar logo */
+  width: auto;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="toolbar">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <input id="fileInput" type="file" accept=".xyz,.txt,.csv" />
-      <button id="btnLoad">Tampilkan Titik</button>
-      <button id="btnBuildDTM">Buat DTM</button>
-      <button id="btnRecolor" class="secondary">Recolor</button>
-      <button id="btnClear" class="secondary">Bersihkan</button>
-      <span id="status" class="chip">Auto-load <b>DTM.xyz</b> jika ada…</span>
+<div id="layout">
+  <!-- ========== SIDEBAR ========== -->
+  <aside id="sidebar">
+    <div id="brand">
+      <img src="assets/img/poseidon.png" class="poseidon-logo" alt="Poseidon" />
     </div>
+    
 
-    <div class="row">
-      <div>
-        <label>Delimiter</label>
-        <select id="delimiter">
-          <option value="auto" selected>Auto (spasi/komma)</option>
-          <option value="comma">Comma</option>
-          <option value="space">Whitespace</option>
-        </select>
+    <div id="controls">
+      <div class="card">
+        <h3>Data</h3>
+        <div class="row">
+          <div>
+            <label>File XYZ</label>
+            <input id="fileInput" type="file" accept=".xyz,.txt,.csv" />
+          </div>
+          <div>
+            <label>Delimiter</label>
+            <select id="delimiter">
+              <option value="auto" selected>Auto (spasi/komma)</option>
+              <option value="comma">Comma</option>
+              <option value="space">Whitespace</option>
+            </select>
+          </div>
+        </div>
+        <div class="stack" style="margin-top:8px">
+          <button class="btn" id="btnLoad">Tampilkan Titik</button>
+          <button class="btn" id="btnBuildDTM">Buat DTM</button>
+          <button class="btn secondary" id="btnRecolor">Recolor</button>
+          <button class="btn secondary" id="btnClear">Bersihkan</button>
+        </div>
+        <div style="margin-top:8px"><span class="status" id="status">Auto-load <b>DTM.xyz</b> jika ada…</span></div>
+        <div class="muted" style="margin-top:8px">Sistem koordinat diasumsikan <b>UTM 49S (EPSG:32749)</b> → otomatis ke WGS84.</div>
       </div>
 
-      <div>
-        <label>Z Offset (m)</label>
-        <input id="zOffset" type="number" value="0" step="0.1" />
+      <div class="card">
+        <h3>Titik</h3>
+        <div class="row">
+          <div>
+            <label>Point Size</label>
+            <input id="pointSize" type="number" value="6" min="1" step="1" />
+          </div>
+          <div>
+            <label>Z Offset (m)</label>
+            <input id="zOffset" type="number" value="0" step="0.1" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="switch">
+            <input id="pointsOnTop" type="checkbox" checked />
+            <span class="muted">Always on Top</span>
+          </div>
+          <div class="switch">
+            <input id="colorizePoints" type="checkbox" checked />
+            <span class="muted">Warna = Bin DTM</span>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <label>Point Size</label>
-        <input id="pointSize" type="number" value="6" min="1" step="1" />
-      </div>
-
-      <div>
-        <label>Points: Always on Top</label>
-        <div class="switch"><input id="pointsOnTop" type="checkbox" checked /><span class="small">titik tak tertutup terrain</span></div>
-      </div>
-
-      <div>
-        <label>Grid Step (deg)</label>
-        <input id="gridStepDeg" type="number" value="0.0005" step="0.0001" />
-      </div>
-
-      <div>
-        <label>Z Exaggeration (DTM)</label>
-        <input id="zExag" type="number" value="1.0" step="0.1" />
+      <div class="card">
+        <h3>DTM</h3>
+        <div class="row">
+          <div>
+            <label>Grid Step (deg)</label>
+            <input id="gridStepDeg" type="number" value="0.0005" step="0.0001" />
+          </div>
+          <div>
+            <label>Z Exaggeration</label>
+            <input id="zExag" type="number" value="1.0" step="0.1" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div>
+            <label>Bins</label>
+            <input id="bins" type="number" value="15" min="4" max="64" step="1" />
+          </div>
+          <div>
+            <label>Palette</label>
+            <select id="palette">
+              <option value="bgyor" selected>Biru→Hijau→Kuning→Oranye→Merah</option>
+              <option value="jet">Jet</option>
+              <option value="viridis">Viridis</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="switch">
+            <input id="autoZRange" type="checkbox" checked />
+            <span class="muted">Range Z Auto</span>
+          </div>
+          <div>
+            <label>Z Min, Z Max (manual)</label>
+            <input id="zMinMax" type="text" placeholder="mis. 2.64, 11.19" />
+          </div>
+        </div>
+        <div class="switch" style="margin-top:8px">
+          <input id="underground" type="checkbox" />
+          <span class="muted">Underground (terrain transparan)</span>
+        </div>
       </div>
     </div>
+  </aside>
 
-    <div class="row">
-      <div>
-        <label>Bins</label>
-        <input id="bins" type="number" value="15" min="4" max="64" step="1" />
-      </div>
-      <div>
-        <label>Rentang Z</label>
-        <div class="switch"><input id="autoZRange" type="checkbox" checked /><span class="small">Auto (pakai min/max data)</span></div>
-      </div>
-      <div>
-        <label>Z Min, Z Max (manual)</label>
-        <input id="zMinMax" type="text" placeholder="mis. 2.64, 11.19" />
-      </div>
-      <div>
-        <label>Underground Mode</label>
-        <div class="switch"><input id="underground" type="checkbox" /><span class="small">terrain transparan</span></div>
-      </div>
-      <div>
-        <label>Color Set</label>
-        <select id="palette">
-          <option value="bgyor" selected>Biru→Hijau→Kuning→Oranye→Merah</option>
-          <option value="jet">Jet (mirip MATLAB)</option>
-          <option value="viridis">Viridis (perseptual)</option>
-        </select>
-      </div>
-      <div>
-        <label>Warna Titik = Warna Bin</label>
-        <div class="switch"><input id="colorizePoints" type="checkbox" checked /><span class="small">samakan dengan DTM</span></div>
-      </div>
+  <!-- ========== MAP PANEL ========== -->
+  <main id="map">
+    <div id="cesiumContainer"></div>
+    <!-- Legend mengambang (kanan bawah) -->
+    <div id="legend">
+      <h5>Elevation (m)</h5>
+      <canvas id="legendCanvas" width="56" height="260"></canvas>
+      <div id="legendTicks" class="muted"></div>
     </div>
-
-    <div class="small">Data diasumsikan <b>UTM 49S (EPSG:32749)</b> → otomatis ke WGS84. 
-    Contoh dari gambar Anda: set <b>Bins=15</b>, uncheck Auto, isi <b>2.64, 11.19</b>, lalu klik <b>Buat DTM</b>.</div>
-  </div>
-
-  <div id="cesiumContainer"></div>
-
-  <!-- Legend -->
-  <div id="legend">
-    <h5>Elevation (m)</h5>
-    <canvas id="legendCanvas" width="56" height="260"></canvas>
-    <div id="legendTicks" class="small" style="margin-top:6px"></div>
-  </div>
-
-  <!-- Popup -->
-  <div id="popup"></div>
+    <div id="popup"></div>
+  </main>
 </div>
 
 <script>
 (async function(){
-  // === Ion token
   Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhNGQwNTBlZS1iOGVlLTQxZDgtODdiMC03YWQ1ZGUzYWFjZTQiLCJpZCI6MjUyMDkzLCJpYXQiOjE3NjA0MTgyNjB9.N9LrYm3UyvJs5Qgkm2P2DDbIReiWGp1MGOqz-fwfHTc";
 
-  // === Viewer + 3D Terrain
   const viewer = new Cesium.Viewer('cesiumContainer', {
     terrainProvider: await Cesium.createWorldTerrainAsync(),
     baseLayerPicker: true, geocoder: false, homeButton: true,
@@ -139,19 +182,17 @@
   });
   viewer.scene.globe.depthTestAgainstTerrain = false;
 
-  // === Tambahkan OSM Buildings
-  try {
-    const osmBuildings = await Cesium.createOsmBuildingsAsync();
-    viewer.scene.primitives.add(osmBuildings);
-  } catch (e) {
-    console.warn('Gagal memuat OSM Buildings:', e);
-  }
+  // Hilangkan credit/watermark Cesium
+  try { viewer.cesiumWidget.creditContainer.style.display = 'none'; } catch(e){}
 
-  // === CRS
+  // Tambahkan OSM 3D Buildings
+  try { viewer.scene.primitives.add(await Cesium.createOsmBuildingsAsync()); } catch(e){ console.warn(e); }
+
+  // ====== CRS
   const UTM49S = "+proj=utm +zone=49 +south +datum=WGS84 +units=m +no_defs";
   const WGS84  = "+proj=longlat +datum=WGS84 +no_defs";
 
-  // === Layers & state
+  // ====== Layers & state
   const pointLayer = new Cesium.PointPrimitiveCollection();
   viewer.scene.primitives.add(pointLayer);
   let dtmPrimitive = null;
@@ -160,7 +201,7 @@
   let rawUTM  = [];   // {E,N,Z}
   let zStats  = null; // {min,max}
 
-  // === UI
+  // ====== UI refs
   const $ = id => document.getElementById(id);
   const statusEl=$("status"), fileInput=$("fileInput"), btnLoad=$("btnLoad"),
         btnBuildDTM=$("btnBuildDTM"), btnRecolor=$("btnRecolor"), btnClear=$("btnClear");
@@ -169,10 +210,11 @@
         undergroundChk=$("underground"), pointsOnTop=$("pointsOnTop"),
         binsInp=$("bins"), autoZRange=$("autoZRange"), zMinMax=$("zMinMax"),
         paletteSel=$("palette"), colorizePoints=$("colorizePoints");
-  const popupEl=$("popup"), legendCanvas=$("legendCanvas"), legendTicks=$("legendTicks");
+  const legendCanvas=$("legendCanvas"), legendTicks=$("legendTicks");
+  const popupEl=$("popup");
   const setStatus = html => statusEl.innerHTML = html;
 
-  // === Helpers
+  // ===== Helpers
   function parseLine(line, mode){
     let parts;
     if (mode==="comma") parts=line.split(",");
@@ -209,10 +251,10 @@
       maxLon=Math.max(maxLon,p.lon); maxLat=Math.max(maxLat,p.lat);
     }
     const rect=Cesium.Rectangle.fromDegrees(minLon,minLat,maxLon,maxLat);
-    viewer.camera.flyTo({destination:rect,duration:1.2});
+    viewer.camera.flyTo({destination:rect,duration:1.1});
   }
 
-  // === palettes
+  // palettes
   function hex(h){const v=h.replace('#','');return [parseInt(v.slice(0,2),16),parseInt(v.slice(2,4),16),parseInt(v.slice(4,6),16)];}
   function lerp(a,b,t){return a+(b-a)*t;}
   function lerpC(c1,c2,t){return [Math.round(lerp(c1[0],c2[0],t)),Math.round(lerp(c1[1],c2[1],t)),Math.round(lerp(c1[2],c2[2],t))];}
@@ -241,10 +283,11 @@
     return [Math.min(...lonlatz.map(p=>p.z)), Math.max(...lonlatz.map(p=>p.z))];
   }
 
-  // === legend
+  // legend
   function drawLegend(colors, zmin, zmax, ticks=6){
-    const ctx=legendCanvas.getContext('2d');
-    const w=legendCanvas.width, h=legendCanvas.height;
+    const canvas = legendCanvas;
+    const ctx=canvas.getContext('2d');
+    const w=canvas.width, h=canvas.height;
     ctx.clearRect(0,0,w,h);
     const n=colors.length;
     for(let i=0;i<n;i++){
@@ -272,7 +315,7 @@
     return Math.min(bins-1, Math.floor(t*bins));
   }
 
-  // === build DTM quantized (per-vertex color)
+  // DTM quantized (PerInstanceColorAppearance)
   function buildDTMQuantized(data, stepDeg, zExag, bins, palette, zmin, zmax){
     stepDeg = Math.max(1e-6, Number(stepDeg)||0.0005);
     zExag   = Number(zExag)||1.0;
@@ -326,7 +369,6 @@
     return {positions, indices, vcolors, paletteColors: colors};
   }
 
-  // === RENDER (FIX): gunakan PerInstanceColorAppearance
   function renderDTM(grid){
     if (!grid) return;
     if (dtmPrimitive){ viewer.scene.primitives.remove(dtmPrimitive); dtmPrimitive=null; }
@@ -362,8 +404,8 @@
 
   function colorForPoint(z, zmin, zmax, colors){
     const bins=colors.length;
-    const ci = colorIndexForZ(z, zmin, zmax, bins);
-    const c  = colors[ci];
+    const idx = colorIndexForZ(z, zmin, zmax, bins);
+    const c = colors[idx];
     return new Cesium.Color(c[0]/255,c[1]/255,c[2]/255,0.95);
   }
 
@@ -394,100 +436,99 @@
   const handler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   handler.setInputAction((movement)=>{
     const picked=viewer.scene.pick(movement.position);
-    if (!picked || !picked.primitive || !picked.primitive.id){ popupEl.style.display="none"; return; }
+    const popup=popupEl;
+    if (!picked || !picked.primitive || !picked.primitive.id){ popup.style.display="none"; return; }
     const d=picked.primitive.id;
-    if (d.type!=="utm-point"){ popupEl.style.display="none"; return; }
-    popupEl.innerHTML=`
+    if (d.type!=="utm-point"){ popup.style.display="none"; return; }
+    popup.innerHTML=`
       <h4>XYZ UTM 49S → WGS84</h4>
-      <div class="row"><span>Easting</span><span>${d.E.toFixed(3)} m</span></div>
-      <div class="row"><span>Northing</span><span>${d.N.toFixed(3)} m</span></div>
-      <div class="row"><span>Z (asli)</span><span>${d.Z.toFixed(3)} m</span></div>
-      <div class="row"><span>Lon</span><span>${d.lon.toFixed(6)}°</span></div>
-      <div class="row"><span>Lat</span><span>${d.lat.toFixed(6)}°</span></div>
-      <div class="row"><span>Z (offset)</span><span>${d.z.toFixed(3)} m</span></div>`;
-    popupEl.style.left = movement.position.x + 12 + "px";
-    popupEl.style.top  = movement.position.y + 12 + "px";
-    popupEl.style.display="block";
+      <div class="rowp"><span>Easting</span><span>${d.E.toFixed(3)} m</span></div>
+      <div class="rowp"><span>Northing</span><span>${d.N.toFixed(3)} m</span></div>
+      <div class="rowp"><span>Z (asli)</span><span>${d.Z.toFixed(3)} m</span></div>
+      <div class="rowp"><span>Lon</span><span>${d.lon.toFixed(6)}°</span></div>
+      <div class="rowp"><span>Lat</span><span>${d.lat.toFixed(6)}°</span></div>
+      <div class="rowp"><span>Z (offset)</span><span>${d.z.toFixed(3)} m</span></div>`;
+    popup.style.left = movement.position.x + 12 + "px";
+    popup.style.top  = movement.position.y + 12 + "px";
+    popup.style.display="block";
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   viewer.camera.moveStart.addEventListener(()=>{ popupEl.style.display="none"; });
 
-  // Underground & points on top toggles
+  // Toggles
   function applyUnderground(on){
     const globe=viewer.scene.globe;
     globe.translucency.enabled=!!on;
     if (on) globe.translucency.frontFaceAlpha=0.5;
     viewer.scene.screenSpaceCameraController.enableCollisionDetection=!on;
   }
-  undergroundChk.addEventListener('change',()=>applyUnderground(undergroundChk.checked));
-  pointsOnTop.addEventListener('change',()=>showPoints(dtmPrimitive && dtmPrimitive._appearance ? null : paletteForLegend));
+  document.getElementById('underground').addEventListener('change',()=>applyUnderground(undergroundChk.checked));
+  document.getElementById('pointSize').addEventListener('change', ()=> showPoints(paletteCache));
+  document.getElementById('colorizePoints').addEventListener('change', ()=> showPoints(paletteCache));
+  document.getElementById('pointsOnTop').addEventListener('change', ()=> showPoints(paletteCache));
 
-  // Load + actions
+  // Load flow
+  const status = msg => setStatus(msg);
+
   async function loadAndRenderText(text){
-    setStatus('Konversi UTM 49S → WGS84…');
+    status('Konversi UTM 49S → WGS84…');
     const {utm,wgs,zMin,zMax}=parseUTM49S(text);
-    if (!wgs.length){ setStatus('Gagal parsing. Cek delimiter & format.'); return; }
+    if (!wgs.length){ status('Gagal parsing. Cek delimiter & format.'); return; }
     rawUTM=utm; lonlatz=wgs; zStats={min:zMin,max:zMax};
     showPoints(null);
-    setStatus(`Titik: ${lonlatz.length.toLocaleString()} | Z[min,max]=[${zMin.toFixed(2)}, ${zMax.toFixed(2)}]`);
+    status(`Titik: ${lonlatz.length.toLocaleString()} | Z[min,max]=[${zMin.toFixed(2)}, ${zMax.toFixed(2)}]`);
   }
 
-  let paletteForLegend=null; // cache palette terakhir
+  let paletteCache=null;
 
-  function buildAndRenderDTM(){
-    if (!lonlatz.length){ setStatus('Tidak ada data. Load dulu.'); return; }
+  function computeAndRenderDTM(){
+    if (!lonlatz.length){ status('Tidak ada data. Load dulu.'); return; }
     const bins = Math.max(4, Math.min(256, parseInt(binsInp.value)||15));
     const [zmin,zmax] = computeZRange();
     const grid = buildDTMQuantized(lonlatz, gridStepInp.value, zExagInp.value, bins, paletteSel.value, zmin, zmax);
     renderDTM(grid);
-    paletteForLegend = grid.paletteColors;
-    drawLegend(paletteForLegend, zmin, zmax, 6);
-    if (colorizePoints.checked) showPoints(paletteForLegend);
-    setStatus(`DTM siap ✔  |  Bins=${bins}  |  Range=[${zmin.toFixed(2)}, ${zmax.toFixed(2)}] m`);
+    paletteCache = grid.paletteColors;
+    drawLegend(paletteCache, zmin, zmax, 6);
+    if (colorizePoints.checked) showPoints(paletteCache);
+    status(`DTM siap ✔ | Bins=${bins} | Range=[${zmin.toFixed(2)}, ${zmax.toFixed(2)}] m`);
   }
 
-  $("pointSize").addEventListener('change', ()=> showPoints(paletteForLegend));
-  $("colorizePoints").addEventListener('change', ()=> showPoints(paletteForLegend));
-
-  btnLoad.addEventListener('click', async ()=>{
+  document.getElementById('btnLoad').addEventListener('click', async ()=>{
     const f=fileInput.files && fileInput.files[0];
-    if (!f){ setStatus('Pilih file XYZ/CSV dulu.'); return; }
+    if (!f){ status('Pilih file XYZ/CSV dulu.'); return; }
     const t=await f.text(); await loadAndRenderText(t);
   });
-  btnBuildDTM.addEventListener('click', buildAndRenderDTM);
-  btnRecolor.addEventListener('click', buildAndRenderDTM);
+  document.getElementById('btnBuildDTM').addEventListener('click', computeAndRenderDTM);
+  document.getElementById('btnRecolor').addEventListener('click', computeAndRenderDTM);
 
-  btnClear.addEventListener('click', ()=>{
+  document.getElementById('btnClear').addEventListener('click', ()=>{
     pointLayer.removeAll();
     if (dtmPrimitive){ viewer.scene.primitives.remove(dtmPrimitive); dtmPrimitive=null; }
     lonlatz=[]; rawUTM=[]; zStats=null; fileInput.value=''; popupEl.style.display='none';
     legendTicks.textContent = ""; const ctx=legendCanvas.getContext('2d'); ctx.clearRect(0,0,legendCanvas.width,legendCanvas.height);
-    setStatus('Bersih. Siap upload baru.');
+    status('Bersih. Siap upload baru.');
   });
 
-  zOffsetInp.addEventListener('change', ()=>{
+  document.getElementById('zOffset').addEventListener('change', ()=>{
     if (!rawUTM.length) return;
     const zOff=Number(zOffsetInp.value)||0;
     lonlatz=lonlatz.map((p,i)=>({lon:p.lon,lat:p.lat,z:rawUTM[i].Z+zOff}));
     const zs=lonlatz.map(p=>p.z); zStats={min:Math.min(...zs), max:Math.max(...zs)};
-    showPoints(paletteForLegend);
-    if (dtmPrimitive) buildAndRenderDTM();
-    setStatus(`Z Offset: ${zOff} m`);
+    showPoints(paletteCache);
+    if (dtmPrimitive) computeAndRenderDTM();
+    status(`Z Offset: ${zOff} m`);
   });
 
-  // Auto-load DTM.xyz bila ada
+  // Auto-load DTM.xyz
   try{
     const resp=await fetch('./DTM.xyz',{cache:'no-store'});
     if (resp.ok){
       const text=await resp.text();
       await loadAndRenderText(text);
-      setStatus('Auto-load DTM.xyz ✔ — klik "Buat DTM" untuk pewarnaan');
+      status('Auto-load DTM.xyz ✔ — klik "Buat DTM" untuk pewarnaan');
     }else{
-      setStatus('DTM.xyz tidak ditemukan. Silakan unggah file.');
+      status('DTM.xyz tidak ditemukan. Silakan unggah file.');
     }
-  }catch(e){
-    setStatus('Gagal membaca DTM.xyz. Silakan unggah file.');
-    console.warn(e);
-  }
+  }catch(e){ status('Gagal membaca DTM.xyz. Silakan unggah file.'); console.warn(e); }
 })();
 </script>
 </body>
