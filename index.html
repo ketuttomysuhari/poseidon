@@ -9,14 +9,14 @@
 <script src="https://unpkg.com/cesium/Build/Cesium/Cesium.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.1/dist/proj4.js"></script>
 <style>
-  :root{ --sidebar-w: 340px; }
+  :root{ --sidebar-w: 360px; }
   html,body{height:100%;margin:0;background:#0b0f19;color:#eaeef6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   #layout{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:100%;height:100%}
   /* Sidebar */
-  #sidebar{background:#0d1324;border-right:1px solid #1f2a44;display:flex;flex-direction:column;min-width:280px;max-width:520px}
-  #brand{display:flex;align-items:center;gap:10px;padding:14px 14px;border-bottom:1px solid #1f2a44}
-  #brand img{width:28px;height:28px;object-fit:contain}
-  #brand h1{font-size:14px;margin:0;color:#c7d2fe;letter-spacing:.3px}
+  #sidebar{background:#0d1324;border-right:1px solid #1f2a44;display:flex;flex-direction:column;min-width:300px;max-width:560px}
+  #brand{display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid #1f2a44}
+  #brand img.poseidon-logo{height:72px;width:auto;border-radius:12px;object-fit:contain}
+  #brand h1{font-size:16px;margin:0;color:#c7d2fe;letter-spacing:.3px}
   #controls{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:12px}
   .card{border:1px solid #1f2a44;border-radius:12px;background:#0f1526;padding:12px}
   .card h3{margin:0 0 10px 0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#9fb3ff}
@@ -30,28 +30,28 @@
   .switch{display:flex;gap:8px;align-items:center}
   .muted{font-size:12px;opacity:.8}
   .status{display:inline-block;padding:4px 8px;border-radius:999px;border:1px solid #2a385e;background:#0b1120;font-size:12px;color:#9fb3ff}
+
   /* Map panel */
   #map{position:relative}
   #cesiumContainer{position:absolute;inset:0}
+
+  /* Legend: mengambang di kanan bawah map */
+  #legend{position:absolute;right:12px;bottom:12px;z-index:15;background:rgba(18,24,38,.92);border:1px solid #1f2a44;border-radius:10px;padding:10px;min-width:120px}
+  #legend h5{margin:0 0 6px 0;font-size:12px;color:#c7d2fe}
+  #legend canvas{display:block;border:1px solid #1f2a44;border-radius:8px;background:#0b1120}
+  #legend .muted{margin-top:6px}
+
   /* Popup */
   #popup{position:absolute;z-index:20;min-width:220px;max-width:320px;background:rgba(14,18,30,.98);border:1px solid #223055;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.35);padding:10px;display:none;pointer-events:none}
   #popup h4{margin:0 0 6px 0;font-size:13px;color:#c7d2fe}
   #popup .rowp{font-size:12px;display:flex;justify-content:space-between;gap:8px}
-  /* Legend: mengambang di kanan bawah map */
-  #legend{position:absolute;right:12px;bottom:12px;z-index:15;background:rgba(18,24,38,.92);border:1px solid #1f2a44;border-radius:10px;padding:10px}
-  #legend h5{margin:0 0 6px 0;font-size:12px;color:#c7d2fe}
-  #legend canvas{display:block;border:1px solid #1f2a44;border-radius:8px;background:#0b1120}
-  #legend .muted{margin-top:6px}
   /* Sembunyikan watermark Cesium */
   .cesium-widget-credits{display:none !important}
 
-  #brand img.poseidon-logo {
-  height: 70px;          /* atur besar logo */
-  width: auto;
-  border-radius: 12px;
-  object-fit: contain;
-}
-
+  /* Panel hasil profil sederhana */
+  #profileBox{border:1px solid #1f2a44;border-radius:10px;background:#0f1526;padding:10px}
+  #profileCanvas{width:100%;height:160px;border:1px solid #1f2a44;border-radius:8px;background:#0b1120}
+  #profileStats{font-size:12px;margin-top:6px;opacity:.9}
 </style>
 </head>
 <body>
@@ -61,9 +61,9 @@
     <div id="brand">
       <img src="poseidon.png" class="poseidon-logo" alt="Poseidon" />
     </div>
-    
 
     <div id="controls">
+      <!-- DATA -->
       <div class="card">
         <h3>Data</h3>
         <div class="row">
@@ -87,9 +87,10 @@
           <button class="btn secondary" id="btnClear">Bersihkan</button>
         </div>
         <div style="margin-top:8px"><span class="status" id="status">Auto-load <b>DTM.xyz</b> jika ada…</span></div>
-        <div class="muted" style="margin-top:8px">Sistem koordinat diasumsikan <b>UTM 49S (EPSG:32749)</b> → otomatis ke WGS84.</div>
+        <div class="muted" style="margin-top:8px">Koordinat diasumsikan <b>UTM 49S (EPSG:32749)</b> → otomatis ke WGS84.</div>
       </div>
 
+      <!-- TITIK -->
       <div class="card">
         <h3>Titik</h3>
         <div class="row">
@@ -114,6 +115,7 @@
         </div>
       </div>
 
+      <!-- DTM -->
       <div class="card">
         <h3>DTM</h3>
         <div class="row">
@@ -155,18 +157,56 @@
           <span class="muted">Underground (terrain transparan)</span>
         </div>
       </div>
+
+      <!-- ANALISIS -->
+      <div class="card">
+        <h3>Analisis</h3>
+        <div class="row">
+          <div>
+            <label>Mode Gambar</label>
+            <select id="drawMode">
+              <option value="none" selected>— pilih —</option>
+              <option value="line">Profil (garis)</option>
+              <option value="polygon">Poligon (luas/volume)</option>
+            </select>
+          </div>
+          <div>
+            <label>Sampling Profil</label>
+            <input id="profileSamples" type="number" value="200" min="50" step="10" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div>
+            <label>Elev. Referensi (m)</label>
+            <input id="refElevation" type="number" value="0" step="0.1" />
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button id="btnResetDraw" class="btn secondary" style="width:100%">Reset Gambar</button>
+          </div>
+        </div>
+
+        <div id="profileBox" style="margin-top:10px; display:none">
+          <canvas id="profileCanvas" width="600" height="160"></canvas>
+          <div id="profileStats"></div>
+        </div>
+
+        <div id="polyStats" class="muted" style="margin-top:8px; display:none"></div>
+      </div>
     </div>
   </aside>
 
   <!-- ========== MAP PANEL ========== -->
   <main id="map">
     <div id="cesiumContainer"></div>
+
     <!-- Legend mengambang (kanan bawah) -->
     <div id="legend">
       <h5>Elevation (m)</h5>
       <canvas id="legendCanvas" width="56" height="260"></canvas>
       <div id="legendTicks" class="muted"></div>
     </div>
+
     <div id="popup"></div>
   </main>
 </div>
@@ -181,11 +221,9 @@
     animation: false, timeline: false, sceneModePicker: true, navigationHelpButton: false
   });
   viewer.scene.globe.depthTestAgainstTerrain = false;
-
-  // Hilangkan credit/watermark Cesium
   try { viewer.cesiumWidget.creditContainer.style.display = 'none'; } catch(e){}
 
-  // Tambahkan OSM 3D Buildings
+  // OSM Buildings
   try { viewer.scene.primitives.add(await Cesium.createOsmBuildingsAsync()); } catch(e){ console.warn(e); }
 
   // ====== CRS
@@ -200,6 +238,8 @@
   let lonlatz = [];   // {lon,lat,z} offset-applied
   let rawUTM  = [];   // {E,N,Z}
   let zStats  = null; // {min,max}
+  const drawLayer = viewer.scene.primitives.add(new Cesium.PrimitiveCollection());
+  let activePolyline = null, activePolygon = null, drawPositions = [];
 
   // ====== UI refs
   const $ = id => document.getElementById(id);
@@ -212,9 +252,15 @@
         paletteSel=$("palette"), colorizePoints=$("colorizePoints");
   const legendCanvas=$("legendCanvas"), legendTicks=$("legendTicks");
   const popupEl=$("popup");
+
+  const drawModeSel=$("drawMode"), profileSamplesInp=$("profileSamples"),
+        refElevInp=$("refElevation"), btnResetDraw=$("btnResetDraw"),
+        profileBox=$("profileBox"), profileCanvas=$("profileCanvas"),
+        profileStats=$("profileStats"), polyStats=$("polyStats");
+
   const setStatus = html => statusEl.innerHTML = html;
 
-  // ===== Helpers
+  // ===== Helpers (parsing, palettes, legend) =====
   function parseLine(line, mode){
     let parts;
     if (mode==="comma") parts=line.split(",");
@@ -254,7 +300,6 @@
     viewer.camera.flyTo({destination:rect,duration:1.1});
   }
 
-  // palettes
   function hex(h){const v=h.replace('#','');return [parseInt(v.slice(0,2),16),parseInt(v.slice(2,4),16),parseInt(v.slice(4,6),16)];}
   function lerp(a,b,t){return a+(b-a)*t;}
   function lerpC(c1,c2,t){return [Math.round(lerp(c1[0],c2[0],t)),Math.round(lerp(c1[1],c2[1],t)),Math.round(lerp(c1[2],c2[2],t))];}
@@ -267,7 +312,7 @@
       const stops=[[0,0,131],[0,60,170],[5,255,255],[255,255,0],[250,0,0],[128,0,0]];
       for(let i=0;i<n;i++){const t=i/(n-1), s=t*(stops.length-1), a=Math.floor(s), b=Math.min(stops.length-1,a+1); arr.push(lerpC(stops[a],stops[b],s-a));}
     } else {
-      const stops=[hex("#0000ff"),hex("#00ff00"),hex("#ffff00"),hex("#ff9900"),hex("#ff0000")];
+      const stops=[[0,0,255],[0,255,0],[255,255,0],[255,153,0],[255,0,0]];
       for(let i=0;i<n;i++){const t=i/(n-1), s=t*(stops.length-1), a=Math.floor(s), b=Math.min(stops.length-1,a+1); arr.push(lerpC(stops[a],stops[b],s-a));}
     }
     return arr;
@@ -283,7 +328,6 @@
     return [Math.min(...lonlatz.map(p=>p.z)), Math.max(...lonlatz.map(p=>p.z))];
   }
 
-  // legend
   function drawLegend(colors, zmin, zmax, ticks=6){
     const canvas = legendCanvas;
     const ctx=canvas.getContext('2d');
@@ -315,7 +359,9 @@
     return Math.min(bins-1, Math.floor(t*bins));
   }
 
-  // DTM quantized (PerInstanceColorAppearance)
+  // ===== DTM build + metadata (tambahkan grid z untuk analisis) =====
+  let dtmMeta = null; // {minLon,minLat,stepDeg,nx,ny,zGrid[]}
+
   function buildDTMQuantized(data, stepDeg, zExag, bins, palette, zmin, zmax){
     stepDeg = Math.max(1e-6, Number(stepDeg)||0.0005);
     zExag   = Number(zExag)||1.0;
@@ -336,6 +382,9 @@
       const k=idx(ix,iy); sum[k]+=p.z; cnt[k]+=1;
     }
 
+    const zGrid=new Float64Array(nx*ny);
+    for(let i=0;i<nx*ny;i++){ zGrid[i] = cnt[i]? (sum[i]/cnt[i]) : zmin; }
+
     const positions=new Float64Array(nx*ny*3);
     const vcolors =new Uint8Array(nx*ny*4);
     let ptrP=0, ptrC=0;
@@ -345,7 +394,7 @@
       for(let ix=0;ix<nx;ix++){
         const lon=minLon+ix*stepDeg;
         const k=idx(ix,iy);
-        const zraw = cnt[k]?(sum[k]/cnt[k]):zmin;
+        const zraw = zGrid[k];
         const z = zraw * zExag;
         const c3=Cesium.Cartesian3.fromDegrees(lon,lat,z);
         positions[ptrP++]=c3.x; positions[ptrP++]=c3.y; positions[ptrP++]=c3.z;
@@ -366,6 +415,8 @@
         indices[ip++]=b; indices[ip++]=c; indices[ip++]=d;
       }
     }
+
+    dtmMeta = {minLon, minLat, stepDeg, nx, ny, zGrid};
     return {positions, indices, vcolors, paletteColors: colors};
   }
 
@@ -432,15 +483,14 @@
     flyToBounds(lonlatz);
   }
 
-  // Popup
+  // ====== Popup titik ======
   const handler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   handler.setInputAction((movement)=>{
     const picked=viewer.scene.pick(movement.position);
-    const popup=popupEl;
-    if (!picked || !picked.primitive || !picked.primitive.id){ popup.style.display="none"; return; }
+    if (!picked || !picked.primitive || !picked.primitive.id){ popupEl.style.display="none"; return; }
     const d=picked.primitive.id;
-    if (d.type!=="utm-point"){ popup.style.display="none"; return; }
-    popup.innerHTML=`
+    if (d.type!=="utm-point"){ popupEl.style.display="none"; return; }
+    popupEl.innerHTML=`
       <h4>XYZ UTM 49S → WGS84</h4>
       <div class="rowp"><span>Easting</span><span>${d.E.toFixed(3)} m</span></div>
       <div class="rowp"><span>Northing</span><span>${d.N.toFixed(3)} m</span></div>
@@ -448,13 +498,13 @@
       <div class="rowp"><span>Lon</span><span>${d.lon.toFixed(6)}°</span></div>
       <div class="rowp"><span>Lat</span><span>${d.lat.toFixed(6)}°</span></div>
       <div class="rowp"><span>Z (offset)</span><span>${d.z.toFixed(3)} m</span></div>`;
-    popup.style.left = movement.position.x + 12 + "px";
-    popup.style.top  = movement.position.y + 12 + "px";
-    popup.style.display="block";
+    popupEl.style.left = movement.position.x + 12 + "px";
+    popupEl.style.top  = movement.position.y + 12 + "px";
+    popupEl.style.display="block";
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   viewer.camera.moveStart.addEventListener(()=>{ popupEl.style.display="none"; });
 
-  // Toggles
+  // ====== Underground toggle ======
   function applyUnderground(on){
     const globe=viewer.scene.globe;
     globe.translucency.enabled=!!on;
@@ -466,7 +516,7 @@
   document.getElementById('colorizePoints').addEventListener('change', ()=> showPoints(paletteCache));
   document.getElementById('pointsOnTop').addEventListener('change', ()=> showPoints(paletteCache));
 
-  // Load flow
+  // ====== Load flow ======
   const status = msg => setStatus(msg);
 
   async function loadAndRenderText(text){
@@ -505,6 +555,8 @@
     if (dtmPrimitive){ viewer.scene.primitives.remove(dtmPrimitive); dtmPrimitive=null; }
     lonlatz=[]; rawUTM=[]; zStats=null; fileInput.value=''; popupEl.style.display='none';
     legendTicks.textContent = ""; const ctx=legendCanvas.getContext('2d'); ctx.clearRect(0,0,legendCanvas.width,legendCanvas.height);
+    profileBox.style.display='none'; polyStats.style.display='none';
+    clearDrawing();
     status('Bersih. Siap upload baru.');
   });
 
@@ -518,7 +570,6 @@
     status(`Z Offset: ${zOff} m`);
   });
 
-  // Auto-load DTM.xyz
   try{
     const resp=await fetch('./DTM.xyz',{cache:'no-store'});
     if (resp.ok){
@@ -529,6 +580,250 @@
       status('DTM.xyz tidak ditemukan. Silakan unggah file.');
     }
   }catch(e){ status('Gagal membaca DTM.xyz. Silakan unggah file.'); console.warn(e); }
+
+  // =========================
+  // ==== GAMBAR & ANALISIS ==
+  // =========================
+  function clearDrawing(){
+    drawPositions = [];
+    if (activePolyline){ viewer.entities.remove(activePolyline); activePolyline=null; }
+    if (activePolygon){ viewer.entities.remove(activePolygon); activePolygon=null; }
+  }
+
+  // entity helper
+  const entityLayer = viewer.entities;
+
+  function startLine(){
+    clearDrawing();
+    activePolyline = entityLayer.add({
+      polyline:{
+        positions: new Cesium.CallbackProperty(()=> drawPositions, false),
+        width:3,
+        material: Cesium.Color.CYAN
+      }
+    });
+  }
+  function startPolygon(){
+    clearDrawing();
+    activePolygon = entityLayer.add({
+      polygon:{
+        hierarchy: new Cesium.CallbackProperty(()=> new Cesium.PolygonHierarchy(drawPositions), false),
+        material: Cesium.Color.fromCssColorString('#00bcd44d'),
+        outline:true, outlineColor: Cesium.Color.CYAN
+      }
+    });
+  }
+
+  drawModeSel.addEventListener('change', ()=>{
+    profileBox.style.display='none'; polyStats.style.display='none';
+    if (drawModeSel.value==='line') startLine();
+    else if (drawModeSel.value==='polygon') startPolygon();
+    else clearDrawing();
+  });
+
+  btnResetDraw.addEventListener('click', ()=>{
+    clearDrawing();
+    if (drawModeSel.value==='line') startLine();
+    if (drawModeSel.value==='polygon') startPolygon();
+    profileBox.style.display='none'; polyStats.style.display='none';
+  });
+
+  // click handler for drawing
+  const drawHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  drawHandler.setInputAction((movement)=>{
+    if (drawModeSel.value==='none') return;
+    const cartesian = viewer.scene.pickPosition(movement.position) ||
+                      viewer.camera.pickEllipsoid(movement.position, Cesium.Ellipsoid.WGS84);
+    if (!cartesian) return;
+    const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(cartesian);
+    drawPositions.push(Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, 0));
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  // double click to finish & compute
+  drawHandler.setInputAction((movement)=>{
+    if (drawModeSel.value==='line'){
+      computeProfileFromLine();
+    } else if (drawModeSel.value==='polygon'){
+      computeAreaVolumeFromPolygon();
+    }
+  }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+  // ==== Interpolasi elevasi dari DTM grid ====
+  function zAtLonLat(lon, lat){
+    if (!dtmMeta) return null;
+    const {minLon,minLat,stepDeg,nx,ny,zGrid} = dtmMeta;
+    const ix = (lon - minLon)/stepDeg;
+    const iy = (lat - minLat)/stepDeg;
+    const i0 = Math.floor(ix), j0 = Math.floor(iy);
+    const i1 = i0+1, j1 = j0+1;
+    if (i0<0||j0<0||i1>=nx||j1>=ny) return null;
+    const tx = ix - i0, ty = iy - j0;
+    const idx = (i,j)=> j*nx + i;
+    const z00=zGrid[idx(i0,j0)], z10=zGrid[idx(i1,j0)], z01=zGrid[idx(i0,j1)], z11=zGrid[idx(i1,j1)];
+    const z0 = z00*(1-tx)+z10*tx;
+    const z1 = z01*(1-tx)+z11*tx;
+    return z0*(1-ty)+z1*ty;
+  }
+
+  // ==== Profil sepanjang garis ====
+  function computeProfileFromLine(){
+    if (!dtmMeta){ alert('Bangun DTM dulu.'); return; }
+    if (drawPositions.length < 2){ alert('Gambar minimal dua titik untuk profil.'); return; }
+    const samples = Math.max(50, Math.min(2000, parseInt(profileSamplesInp.value)||200));
+    // kumpulkan path (lon,lat)
+    const pts=[];
+    for (const p of drawPositions){
+      const c = Cesium.Cartographic.fromCartesian(p);
+      pts.push([Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)]);
+    }
+    // hitung panjang segmen
+    const cartos = drawPositions.map(p=>Cesium.Cartographic.fromCartesian(p));
+    const geod = new Cesium.EllipsoidGeodesic();
+    const segLen=[];
+    let total=0;
+    for (let i=0;i<cartos.length-1;i++){
+      geod.setEndPoints(cartos[i], cartos[i+1]);
+      const d=geod.surfaceDistance; segLen.push(d); total+=d;
+    }
+    // sample sepanjang
+    const xs=[], zs=[];
+    for (let s=0;s<samples;s++){
+      const dist = total * (s/(samples-1));
+      // cari segmen
+      let acc=0, i=0;
+      while (i<segLen.length && acc+segLen[i]<dist){ acc+=segLen[i]; i++; }
+      const t = (segLen[i]===0)?0: (dist-acc)/segLen[i];
+      // interp cartographic
+      const a = cartos[i], b = cartos[i+1];
+      geod.setEndPoints(a,b);
+      const carto = geod.interpolateUsingSurfaceDistance(segLen[i]*t);
+      const lon = Cesium.Math.toDegrees(carto.longitude);
+      const lat = Cesium.Math.toDegrees(carto.latitude);
+      const z = zAtLonLat(lon, lat);
+      xs.push(dist); zs.push(z);
+    }
+    drawProfile(xs, zs);
+  }
+
+  function drawProfile(xs, zs){
+    // stats
+    const zmin = Math.min(...zs.filter(v=>v!=null));
+    const zmax = Math.max(...zs.filter(v=>v!=null));
+    const len  = xs[xs.length-1];
+    // plot ke canvas
+    const cv = profileCanvas, ctx=cv.getContext('2d');
+    ctx.clearRect(0,0,cv.width,cv.height);
+    // axes
+    ctx.strokeStyle="#3b82f6"; ctx.lineWidth=1;
+    ctx.strokeRect(36,10,cv.width-46,cv.height-36);
+    // map x->px, z->py
+    const px = d => 36 + d/len*(cv.width-46);
+    const py = z => {
+      const t=(z - zmin)/Math.max(1e-9,(zmax - zmin));
+      return 10 + (1-t)*(cv.height-36);
+    };
+    // grid
+    ctx.strokeStyle="#223055"; ctx.lineWidth=1;
+    for(let i=1;i<=4;i++){
+      const y=10 + i*(cv.height-36)/5;
+      ctx.beginPath(); ctx.moveTo(36,y); ctx.lineTo(cv.width-10,y); ctx.stroke();
+    }
+    // line
+    ctx.strokeStyle="#9fb3ff"; ctx.lineWidth=2;
+    ctx.beginPath();
+    for (let i=0;i<xs.length;i++){
+      if (zs[i]==null) continue;
+      const x=px(xs[i]); const y=py(zs[i]);
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    // labels
+    ctx.fillStyle="#eaeef6"; ctx.font="11px system-ui";
+    ctx.fillText(`0 m`, 36, cv.height-8);
+    ctx.textAlign="right";
+    ctx.fillText(`${len.toFixed(1)} m`, cv.width-12, cv.height-8);
+    ctx.textAlign="left";
+    ctx.fillText(`z[min,max]=[${zmin.toFixed(2)}, ${zmax.toFixed(2)}] m`, 40, 22);
+
+    profileBox.style.display='block';
+    profileStats.innerHTML = `Panjang: <b>${(len/1000).toFixed(3)} km</b> · Zmin: <b>${zmin.toFixed(2)} m</b> · Zmax: <b>${zmax.toFixed(2)} m</b>`;
+  }
+
+  // ==== Area & Volume dari poligon ====
+  function computeAreaVolumeFromPolygon(){
+    if (!dtmMeta){ alert('Bangun DTM dulu.'); return; }
+    if (drawPositions.length < 3){ alert('Gambar minimal tiga titik untuk poligon.'); return; }
+
+    // vertices lon/lat
+    const verts = drawPositions.map(p=>{
+      const c=Cesium.Cartographic.fromCartesian(p);
+      return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
+    });
+
+    // area (planar ENU di centroid)
+    const centroidLon = verts.reduce((s,v)=>s+v[0],0)/verts.length;
+    const centroidLat = verts.reduce((s,v)=>s+v[1],0)/verts.length;
+    const cenCart = Cesium.Cartesian3.fromDegrees(centroidLon, centroidLat, 0);
+    const enu = Cesium.Transforms.eastNorthUpToFixedFrame(cenCart);
+    const inv = Cesium.Matrix4.inverse(enu, new Cesium.Matrix4());
+
+    function lonlatToEN(v){
+      const cart = Cesium.Cartesian3.fromDegrees(v[0], v[1], 0);
+      return Cesium.Matrix4.multiplyByPoint(inv, cart, new Cesium.Cartesian3());
+    }
+    const enPts = verts.map(lonlatToEN);
+    // shoelace
+    let area=0;
+    for (let i=0;i<enPts.length;i++){
+      const a=enPts[i], b=enPts[(i+1)%enPts.length];
+      area += (a.x*b.y - b.x*a.y);
+    }
+    area = Math.abs(area)*0.5; // m²
+
+    // volume di atas elev. referensi (hanya positif)
+    const {minLon,minLat,stepDeg,nx,ny,zGrid} = dtmMeta;
+    const ref = Number(refElevInp.value)||0;
+
+    // helper: point in polygon (ray casting) untuk lon/lat
+    function pointInPoly(lon,lat){
+      let inside=false;
+      for (let i=0,j=verts.length-1;i<verts.length;j=i++){
+        const xi=verts[i][0], yi=verts[i][1];
+        const xj=verts[j][0], yj=verts[j][1];
+        const intersect = ((yi>lat)!=(yj>lat)) && (lon < (xj-xi)*(lat-yi)/(yj-yi+1e-12)+xi);
+        if (intersect) inside=!inside;
+      }
+      return inside;
+    }
+
+    // loop grid cell center
+    let volume=0, coveredArea=0, count=0;
+    for (let j=0;j<ny;j++){
+      const lat = minLat + j*stepDeg;
+      // konversi step deg ke meter, approx
+      const latMeters = 111320 * stepDeg;
+      const lonMeters = 111320 * Math.cos(lat*Math.PI/180) * stepDeg;
+      const cellArea = latMeters * lonMeters;
+
+      for (let i=0;i<nx;i++){
+        const lon = minLon + i*stepDeg;
+        if (!pointInPoly(lon,lat)) continue;
+        const z = zGrid[j*nx + i];
+        const h = Math.max(0, z - ref);
+        volume += h * cellArea;
+        coveredArea += cellArea;
+        count++;
+      }
+    }
+
+    polyStats.style.display='block';
+    polyStats.innerHTML = `
+      <div><b>Luas</b>: ${(area).toFixed(2)} m² (${(area/10000).toFixed(4)} ha)</div>
+      <div><b>Volume (z > ${ref.toFixed(2)} m)</b>: ${(volume).toFixed(2)} m³</div>
+      <div class="muted">Sel terhitung: ${count.toLocaleString()} | Step: ${ (dtmMeta.stepDeg).toFixed(6)}°</div>
+    `;
+  }
+
 })();
 </script>
 </body>
