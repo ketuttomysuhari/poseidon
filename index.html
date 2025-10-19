@@ -2,20 +2,26 @@
 <html lang="id">
 <head>
 <meta charset="utf-8" />
-<title>Poseidon WebGIS</title>
+<title>PoseidonX WebGIS</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+<!-- Cesium & deps -->
 <link rel="stylesheet" href="https://unpkg.com/cesium/Build/Cesium/Widgets/widgets.css">
 <script>window.CESIUM_BASE_URL="https://unpkg.com/cesium/Build/Cesium/";</script>
 <script src="https://unpkg.com/cesium/Build/Cesium/Cesium.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/proj4@2.9.1/dist/proj4.js"></script>
+
+<!-- jsPDF untuk export PDF -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
 <style>
-  :root{ --sidebar-w: 360px; }
+  :root{ --sidebar-w: 380px; }
   html,body{height:100%;margin:0;background:#0b0f19;color:#eaeef6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   #layout{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:100%;height:100%}
   /* Sidebar */
   #sidebar{background:#0d1324;border-right:1px solid #1f2a44;display:flex;flex-direction:column;min-width:300px;max-width:560px}
   #brand{display:flex;align-items:center;gap:12px;padding:14px;border-bottom:1px solid #1f2a44}
-  #brand img.poseidon-logo{height:72px;width:auto;border-radius:12px;object-fit:contain}
+  #brand img.poseidon-logo{height:56px;width:auto;border-radius:12px;object-fit:contain}
   #brand h1{font-size:16px;margin:0;color:#c7d2fe;letter-spacing:.3px}
   #controls{padding:12px;overflow:auto;display:flex;flex-direction:column;gap:12px}
   .card{border:1px solid #1f2a44;border-radius:12px;background:#0f1526;padding:12px}
@@ -26,6 +32,7 @@
   input[type=file]{color:#9fb3ff}
   .btn{background:linear-gradient(180deg,#3b82f6,#2563eb);border:none;color:#fff;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:600}
   .btn.secondary{background:#223055}
+  .btn.ghost{background:#0f1526;border:1px solid #2a385e}
   .stack{display:flex;flex-wrap:wrap;gap:8px}
   .switch{display:flex;gap:8px;align-items:center}
   .muted{font-size:12px;opacity:.8}
@@ -35,23 +42,47 @@
   #map{position:relative}
   #cesiumContainer{position:absolute;inset:0}
 
-  /* Legend: mengambang di kanan bawah map */
+  /* Legend: kanan bawah map */
   #legend{position:absolute;right:12px;bottom:12px;z-index:15;background:rgba(18,24,38,.92);border:1px solid #1f2a44;border-radius:10px;padding:10px;min-width:120px}
   #legend h5{margin:0 0 6px 0;font-size:12px;color:#c7d2fe}
   #legend canvas{display:block;border:1px solid #1f2a44;border-radius:8px;background:#0b1120}
   #legend .muted{margin-top:6px}
 
-  /* Popup */
+  /* Popup info titik */
   #popup{position:absolute;z-index:20;min-width:220px;max-width:320px;background:rgba(14,18,30,.98);border:1px solid #223055;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.35);padding:10px;display:none;pointer-events:none}
   #popup h4{margin:0 0 6px 0;font-size:13px;color:#c7d2fe}
   #popup .rowp{font-size:12px;display:flex;justify-content:space-between;gap:8px}
+
   /* Sembunyikan watermark Cesium */
   .cesium-widget-credits{display:none !important}
 
-  /* Panel hasil profil sederhana */
+  /* Panel profil */
   #profileBox{border:1px solid #1f2a44;border-radius:10px;background:#0f1526;padding:10px}
-  #profileCanvas{width:100%;height:160px;border:1px solid #1f2a44;border-radius:8px;background:#0b1120}
+  #profileCanvas{width:100%;height:180px;border:1px solid #1f2a44;border-radius:8px;background:#0b1120}
   #profileStats{font-size:12px;margin-top:6px;opacity:.9}
+
+  /* ===== Measure toolbar ===== */
+  #measureToolbar{
+    position:absolute;left:12px;bottom:12px;z-index:16;display:flex;gap:8px;
+    background:rgba(18,24,38,.92);border:1px solid #1f2a44;border-radius:12px;padding:8px
+  }
+  #measureToolbar button{
+    display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;
+    border-radius:8px;border:1px solid #2a385e;background:#0f1526;cursor:pointer
+  }
+  #measureToolbar button.active{outline:2px solid #3b82f6}
+  #measureToolbar svg{width:18px;height:18px;fill:#c7d2fe}
+
+  /* Data manager list */
+  #dataList .item{
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+    width:100%;border:1px solid #1f2a44;border-radius:8px;padding:8px;background:#0b1120
+  }
+  #dataList .item b{color:#c7d2fe;font-size:12px}
+  #dataList .item .meta{font-size:11px;opacity:.85}
+  #dataList .item button{
+    background:#223055;border:1px solid #2a385e;color:#eaeef6;border-radius:8px;padding:6px 8px;cursor:pointer
+  }
 </style>
 </head>
 <body>
@@ -85,6 +116,7 @@
           <button class="btn" id="btnBuildDTM">Buat DTM</button>
           <button class="btn secondary" id="btnRecolor">Recolor</button>
           <button class="btn secondary" id="btnClear">Bersihkan</button>
+          <button class="btn ghost" id="btnExport">Export PDF</button>
         </div>
         <div style="margin-top:8px"><span class="status" id="status">Auto-load <b>DTM.xyz</b> jika ada…</span></div>
         <div class="muted" style="margin-top:8px">Koordinat diasumsikan <b>UTM 49S (EPSG:32749)</b> → otomatis ke WGS84.</div>
@@ -187,11 +219,30 @@
         </div>
 
         <div id="profileBox" style="margin-top:10px; display:none">
-          <canvas id="profileCanvas" width="600" height="160"></canvas>
+          <canvas id="profileCanvas" width="640" height="200"></canvas>
           <div id="profileStats"></div>
         </div>
 
         <div id="polyStats" class="muted" style="margin-top:8px; display:none"></div>
+      </div>
+
+      <!-- LAYERS -->
+      <div class="card">
+        <h3>Layers</h3>
+        <div class="stack">
+          <label class="switch"><input id="lyPoints" type="checkbox" checked /> <span class="muted">Points</span></label>
+          <label class="switch"><input id="lyDTM" type="checkbox" checked /> <span class="muted">DTM</span></label>
+          <label class="switch"><input id="lyAnalLine" type="checkbox" checked /> <span class="muted">Analisis: Line</span></label>
+          <label class="switch"><input id="lyAnalPoly" type="checkbox" checked /> <span class="muted">Analisis: Polygon</span></label>
+          <label class="switch"><input id="lyMeasure" type="checkbox" checked /> <span class="muted">Measure</span></label>
+        </div>
+      </div>
+
+      <!-- DATA MANAGER -->
+      <div class="card">
+        <h3>Data Manager</h3>
+        <div class="muted" style="margin-bottom:6px">Fitur yang disimpan</div>
+        <div id="dataList" class="stack"></div>
       </div>
     </div>
   </aside>
@@ -208,43 +259,66 @@
     </div>
 
     <div id="popup"></div>
+
+    <!-- Measure toolbar -->
+    <div id="measureToolbar" title="Measure tools">
+      <button id="btnMPoint" aria-label="Measure point" title="Point">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></svg>
+      </button>
+      <button id="btnMLine" aria-label="Measure distance" title="Line">
+        <svg viewBox="0 0 24 24"><path d="M4 18 L20 6"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="6" r="2"/></svg>
+      </button>
+      <button id="btnMPoly" aria-label="Measure area" title="Polygon">
+        <svg viewBox="0 0 24 24"><path d="M6 4 L18 6 L20 16 L8 20 Z"/></svg>
+      </button>
+      <button id="btnMClear" aria-label="Clear measure" title="Clear">
+        <svg viewBox="0 0 24 24"><path d="M6 6 L18 18 M6 18 L18 6"/></svg>
+      </button>
+    </div>
   </main>
 </div>
 
 <script>
 (async function(){
+  // ===== Ion token (sesuai permintaan) =====
   Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhNGQwNTBlZS1iOGVlLTQxZDgtODdiMC03YWQ1ZGUzYWFjZTQiLCJpZCI6MjUyMDkzLCJpYXQiOjE3NjA0MTgyNjB9.N9LrYm3UyvJs5Qgkm2P2DDbIReiWGp1MGOqz-fwfHTc";
 
+  // ===== Viewer dengan fallback Terrain jika 401 =====
+  let terrain;
+  try { terrain = await Cesium.createWorldTerrainAsync(); }
+  catch(err){ console.warn("WorldTerrain failed, fallback to EllipsoidTerrain", err); terrain = new Cesium.EllipsoidTerrainProvider(); }
+
   const viewer = new Cesium.Viewer('cesiumContainer', {
-    terrainProvider: await Cesium.createWorldTerrainAsync(),
+    terrainProvider: terrain,
     baseLayerPicker: true, geocoder: false, homeButton: true,
     animation: false, timeline: false, sceneModePicker: true, navigationHelpButton: false
   });
   viewer.scene.globe.depthTestAgainstTerrain = false;
   try { viewer.cesiumWidget.creditContainer.style.display = 'none'; } catch(e){}
 
-  // OSM Buildings
-  try { viewer.scene.primitives.add(await Cesium.createOsmBuildingsAsync()); } catch(e){ console.warn(e); }
+  try {
+    if (Cesium.Ion.defaultAccessToken) {
+      viewer.scene.primitives.add(await Cesium.createOsmBuildingsAsync());
+    }
+  } catch(e){ console.warn("OSM Buildings skipped (Ion required).", e); }
 
   // ====== CRS
   const UTM49S = "+proj=utm +zone=49 +south +datum=WGS84 +units=m +no_defs";
   const WGS84  = "+proj=longlat +datum=WGS84 +no_defs";
 
   // ====== Layers & state
-  const pointLayer = new Cesium.PointPrimitiveCollection();
-  viewer.scene.primitives.add(pointLayer);
+  const pointLayer = new Cesium.PointPrimitiveCollection(); viewer.scene.primitives.add(pointLayer);
   let dtmPrimitive = null;
-
   let lonlatz = [];   // {lon,lat,z} offset-applied
   let rawUTM  = [];   // {E,N,Z}
   let zStats  = null; // {min,max}
-  const drawLayer = viewer.scene.primitives.add(new Cesium.PrimitiveCollection());
-  let activePolyline = null, activePolygon = null, drawPositions = [];
+  let dtmMeta = null; // {minLon,minLat,stepDeg,nx,ny,zGrid[]}
 
   // ====== UI refs
   const $ = id => document.getElementById(id);
   const statusEl=$("status"), fileInput=$("fileInput"), btnLoad=$("btnLoad"),
-        btnBuildDTM=$("btnBuildDTM"), btnRecolor=$("btnRecolor"), btnClear=$("btnClear");
+        btnBuildDTM=$("btnBuildDTM"), btnRecolor=$("btnRecolor"), btnClear=$("btnClear"),
+        btnExport=$("btnExport");
   const delimiterSel=$("delimiter"), zExagInp=$("zExag"), gridStepInp=$("gridStepDeg");
   const pointSizeInp=$("pointSize"), zOffsetInp=$("zOffset"),
         undergroundChk=$("underground"), pointsOnTop=$("pointsOnTop"),
@@ -258,6 +332,13 @@
         profileBox=$("profileBox"), profileCanvas=$("profileCanvas"),
         profileStats=$("profileStats"), polyStats=$("polyStats");
 
+  // Layer toggles
+  const lyPoints=$("lyPoints"), lyDTM=$("lyDTM"), lyAnalLine=$("lyAnalLine"),
+        lyAnalPoly=$("lyAnalPoly"), lyMeasure=$("lyMeasure");
+
+  // Measure toolbar refs
+  const btnMPoint=$("btnMPoint"), btnMLine=$("btnMLine"), btnMPoly=$("btnMPoly"), btnMClear=$("btnMClear");
+
   const setStatus = html => statusEl.innerHTML = html;
 
   // ===== Helpers (parsing, palettes, legend) =====
@@ -269,13 +350,11 @@
     if (parts.length < 3) return null;
     return parts.slice(0,3).map(v=>parseFloat(v));
   }
-
   function parseUTM49S(text){
     const lines=text.split(/\r?\n/);
     const utm=[], wgs=[];
     const zOffset=Number(zOffsetInp.value)||0;
     let zMin=+Infinity, zMax=-Infinity;
-
     for (const raw of lines){
       const line=raw.trim(); if (!line) continue;
       if (!/[-+0-9.]/.test(line[0])) continue;
@@ -288,7 +367,6 @@
     }
     return {utm,wgs,zMin,zMax};
   }
-
   function flyToBounds(data){
     if (!data.length) return;
     let minLon=+Infinity,minLat=+Infinity,maxLon=-Infinity,maxLat=-Infinity;
@@ -299,8 +377,6 @@
     const rect=Cesium.Rectangle.fromDegrees(minLon,minLat,maxLon,maxLat);
     viewer.camera.flyTo({destination:rect,duration:1.1});
   }
-
-  function hex(h){const v=h.replace('#','');return [parseInt(v.slice(0,2),16),parseInt(v.slice(2,4),16),parseInt(v.slice(4,6),16)];}
   function lerp(a,b,t){return a+(b-a)*t;}
   function lerpC(c1,c2,t){return [Math.round(lerp(c1[0],c2[0],t)),Math.round(lerp(c1[1],c2[1],t)),Math.round(lerp(c1[2],c2[2],t))];}
   function makePalette(name, n){
@@ -317,7 +393,6 @@
     }
     return arr;
   }
-
   function computeZRange(){
     if (autoZRange.checked || !zMinMax.value.trim()){
       return [zStats?.min ?? Math.min(...lonlatz.map(p=>p.z)),
@@ -327,7 +402,6 @@
     if (parts.length>=2 && parts.every(v=>!isNaN(v))) return [parts[0],parts[1]];
     return [Math.min(...lonlatz.map(p=>p.z)), Math.max(...lonlatz.map(p=>p.z))];
   }
-
   function drawLegend(colors, zmin, zmax, ticks=6){
     const canvas = legendCanvas;
     const ctx=canvas.getContext('2d');
@@ -351,7 +425,6 @@
     }
     legendTicks.textContent = `Bins: ${n}  |  Range: ${zmin.toFixed(2)} – ${zmax.toFixed(2)} m`;
   }
-
   function colorIndexForZ(z, zmin, zmax, bins){
     if (zmax===zmin) return 0;
     let t=(z - zmin)/(zmax - zmin);
@@ -359,9 +432,9 @@
     return Math.min(bins-1, Math.floor(t*bins));
   }
 
-  // ===== DTM build + metadata (tambahkan grid z untuk analisis) =====
-  let dtmMeta = null; // {minLon,minLat,stepDeg,nx,ny,zGrid[]}
+  let paletteCache=null;
 
+  // ===== DTM build + metadata
   function buildDTMQuantized(data, stepDeg, zExag, bins, palette, zmin, zmax){
     stepDeg = Math.max(1e-6, Number(stepDeg)||0.0005);
     zExag   = Number(zExag)||1.0;
@@ -419,7 +492,6 @@
     dtmMeta = {minLon, minLat, stepDeg, nx, ny, zGrid};
     return {positions, indices, vcolors, paletteColors: colors};
   }
-
   function renderDTM(grid){
     if (!grid) return;
     if (dtmPrimitive){ viewer.scene.primitives.remove(dtmPrimitive); dtmPrimitive=null; }
@@ -452,19 +524,16 @@
 
     viewer.scene.primitives.add(dtmPrimitive);
   }
-
   function colorForPoint(z, zmin, zmax, colors){
     const bins=colors.length;
     const idx = colorIndexForZ(z, zmin, zmax, bins);
     const c = colors[idx];
     return new Cesium.Color(c[0]/255,c[1]/255,c[2]/255,0.95);
   }
-
   function showPoints(colorsForBins){
     pointLayer.removeAll();
     const ps=Math.max(1, Number(pointSizeInp.value)||6);
     const [zmin,zmax]=computeZRange();
-
     for(let i=0;i<lonlatz.length;i++){
       const p=lonlatz[i], u=rawUTM[i];
       const col = (colorizePoints.checked && colorsForBins)
@@ -504,21 +573,20 @@
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   viewer.camera.moveStart.addEventListener(()=>{ popupEl.style.display="none"; });
 
-  // ====== Underground toggle ======
+  // ====== Underground toggle & point controls ======
   function applyUnderground(on){
     const globe=viewer.scene.globe;
     globe.translucency.enabled=!!on;
     if (on) globe.translucency.frontFaceAlpha=0.5;
     viewer.scene.screenSpaceCameraController.enableCollisionDetection=!on;
   }
-  document.getElementById('underground').addEventListener('change',()=>applyUnderground(undergroundChk.checked));
-  document.getElementById('pointSize').addEventListener('change', ()=> showPoints(paletteCache));
-  document.getElementById('colorizePoints').addEventListener('change', ()=> showPoints(paletteCache));
-  document.getElementById('pointsOnTop').addEventListener('change', ()=> showPoints(paletteCache));
+  undergroundChk.addEventListener('change',()=>applyUnderground(undergroundChk.checked));
+  pointSizeInp.addEventListener('change', ()=> showPoints(paletteCache));
+  colorizePoints.addEventListener('change', ()=> showPoints(paletteCache));
+  pointsOnTop.addEventListener('change', ()=> showPoints(paletteCache));
 
   // ====== Load flow ======
   const status = msg => setStatus(msg);
-
   async function loadAndRenderText(text){
     status('Konversi UTM 49S → WGS84…');
     const {utm,wgs,zMin,zMax}=parseUTM49S(text);
@@ -527,8 +595,6 @@
     showPoints(null);
     status(`Titik: ${lonlatz.length.toLocaleString()} | Z[min,max]=[${zMin.toFixed(2)}, ${zMax.toFixed(2)}]`);
   }
-
-  let paletteCache=null;
 
   function computeAndRenderDTM(){
     if (!lonlatz.length){ status('Tidak ada data. Load dulu.'); return; }
@@ -542,25 +608,28 @@
     status(`DTM siap ✔ | Bins=${bins} | Range=[${zmin.toFixed(2)}, ${zmax.toFixed(2)}] m`);
   }
 
-  document.getElementById('btnLoad').addEventListener('click', async ()=>{
+  btnLoad.addEventListener('click', async ()=>{
     const f=fileInput.files && fileInput.files[0];
     if (!f){ status('Pilih file XYZ/CSV dulu.'); return; }
     const t=await f.text(); await loadAndRenderText(t);
   });
-  document.getElementById('btnBuildDTM').addEventListener('click', computeAndRenderDTM);
-  document.getElementById('btnRecolor').addEventListener('click', computeAndRenderDTM);
+  btnBuildDTM.addEventListener('click', computeAndRenderDTM);
+  btnRecolor.addEventListener('click', computeAndRenderDTM);
 
-  document.getElementById('btnClear').addEventListener('click', ()=>{
+  btnClear.addEventListener('click', ()=>{
     pointLayer.removeAll();
     if (dtmPrimitive){ viewer.scene.primitives.remove(dtmPrimitive); dtmPrimitive=null; }
     lonlatz=[]; rawUTM=[]; zStats=null; fileInput.value=''; popupEl.style.display='none';
     legendTicks.textContent = ""; const ctx=legendCanvas.getContext('2d'); ctx.clearRect(0,0,legendCanvas.width,legendCanvas.height);
     profileBox.style.display='none'; polyStats.style.display='none';
-    clearDrawing();
+    clearDrawing(); clearMeasure();
+    features.splice(0, features.length); renderDataList();
+    if (profileMarker){ viewer.entities.remove(profileMarker); profileMarker=null; }
+    profileState = null;
     status('Bersih. Siap upload baru.');
   });
 
-  document.getElementById('zOffset').addEventListener('change', ()=>{
+  zOffsetInp.addEventListener('change', ()=>{
     if (!rawUTM.length) return;
     const zOff=Number(zOffsetInp.value)||0;
     lonlatz=lonlatz.map((p,i)=>({lon:p.lon,lat:p.lat,z:rawUTM[i].Z+zOff}));
@@ -584,33 +653,28 @@
   // =========================
   // ==== GAMBAR & ANALISIS ==
   // =========================
+  const entityLayer = viewer.entities;
+  let activePolyline = null, activePolygon = null, drawPositions = [];
+  const uid = ()=>"f_"+Math.random().toString(36).slice(2,9);
+
   function clearDrawing(){
     drawPositions = [];
     if (activePolyline){ viewer.entities.remove(activePolyline); activePolyline=null; }
     if (activePolygon){ viewer.entities.remove(activePolygon); activePolygon=null; }
   }
-
-  // entity helper
-  const entityLayer = viewer.entities;
-
   function startLine(){
     clearDrawing();
     activePolyline = entityLayer.add({
-      polyline:{
-        positions: new Cesium.CallbackProperty(()=> drawPositions, false),
-        width:3,
-        material: Cesium.Color.CYAN
-      }
+      polyline:{ positions: new Cesium.CallbackProperty(()=> drawPositions, false),
+                 width:3, material: Cesium.Color.CYAN }
     });
   }
   function startPolygon(){
     clearDrawing();
     activePolygon = entityLayer.add({
-      polygon:{
-        hierarchy: new Cesium.CallbackProperty(()=> new Cesium.PolygonHierarchy(drawPositions), false),
-        material: Cesium.Color.fromCssColorString('#00bcd44d'),
-        outline:true, outlineColor: Cesium.Color.CYAN
-      }
+      polygon:{ hierarchy: new Cesium.CallbackProperty(()=> new Cesium.PolygonHierarchy(drawPositions), false),
+                material: Cesium.Color.fromCssColorString('#00bcd44d'),
+                outline:true, outlineColor: Cesium.Color.CYAN }
     });
   }
 
@@ -620,7 +684,6 @@
     else if (drawModeSel.value==='polygon') startPolygon();
     else clearDrawing();
   });
-
   btnResetDraw.addEventListener('click', ()=>{
     clearDrawing();
     if (drawModeSel.value==='line') startLine();
@@ -628,19 +691,126 @@
     profileBox.style.display='none'; polyStats.style.display='none';
   });
 
-  // click handler for drawing
+  // click handler untuk gambar & measure
   const drawHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+  // =====================
+  // === Measure Tools ===
+  // =====================
+  const LAYER = { ANAL_LINE:'anal_line', ANAL_POLY:'anal_poly', MEASURE:'measure' };
+  const measureLayer = viewer.entities; // reuse
+  let measureMode='none';
+  let mLinePositions=[], mPolyPositions=[];
+  let mLineEntity=null, mPolyEntity=null, mLabels=[];
+  function setActiveBtn(btn){ [btnMPoint,btnMLine,btnMPoly].forEach(b=>b&&b.classList.remove('active')); if(btn) btn.classList.add('active'); }
+  function setMeasureMode(mode){ measureMode=mode; if(mode==='none'){ setActiveBtn(null); clearMeasure(); } }
+  function clearMeasure(){ mLinePositions=[]; mPolyPositions=[]; if(mLineEntity){measureLayer.remove(mLineEntity);mLineEntity=null;} if(mPolyEntity){measureLayer.remove(mPolyEntity);mPolyEntity=null;} (mLabels||[]).forEach(l=>measureLayer.remove(l)); mLabels=[]; }
+  function addMeasurePoint(cart){
+    const c=Cesium.Cartographic.fromCartesian(cart);
+    const lon=Cesium.Math.toDegrees(c.longitude), lat=Cesium.Math.toDegrees(c.latitude);
+    const label=measureLayer.add({
+      position: cart,
+      point:{pixelSize:8,color:Cesium.Color.YELLOW},
+      label:{ text: `${lon.toFixed(6)}, ${lat.toFixed(6)}`, font:'12px sans-serif', fillColor:Cesium.Color.WHITE,
+              style:Cesium.LabelStyle.FILL_AND_OUTLINE, outlineWidth:3, pixelOffset:new Cesium.Cartesian2(0,-18),
+              verticalOrigin:Cesium.VerticalOrigin.BOTTOM },
+      properties: new Cesium.PropertyBag({ layer: LAYER.MEASURE })
+    });
+    mLabels.push(label);
+  }
+  function addMeasureLineVertex(cart){
+    mLinePositions.push(cart);
+    if(!mLineEntity){
+      mLineEntity = measureLayer.add({
+        polyline:{ positions:new Cesium.CallbackProperty(()=>mLinePositions,false), width:3, material:Cesium.Color.ORANGE },
+        properties: new Cesium.PropertyBag({ layer: LAYER.MEASURE })
+      });
+    }
+    if(mLinePositions.length>=2){
+      const len=measureLineLength(mLinePositions);
+      addOrUpdateLineLabel(mLinePositions[mLinePositions.length-1], len);
+    }
+  }
+  function measureLineLength(cartArray){
+    let total=0; const geod=new Cesium.EllipsoidGeodesic();
+    const cartos=cartArray.map(p=>Cesium.Cartographic.fromCartesian(p));
+    for(let i=0;i<cartos.length-1;i++){ geod.setEndPoints(cartos[i],cartos[i+1]); total += geod.surfaceDistance; }
+    return total;
+  }
+  function addOrUpdateLineLabel(pos, len){
+    if(!mLabels._line){
+      mLabels._line=measureLayer.add({ position: pos,
+        label:{ text:'', font:'12px sans-serif', fillColor:Cesium.Color.WHITE, style:Cesium.LabelStyle.FILL_AND_OUTLINE, outlineWidth:3, pixelOffset:new Cesium.Cartesian2(0,-12) },
+        properties: new Cesium.PropertyBag({ layer: LAYER.MEASURE })
+      });
+      mLabels.push(mLabels._line);
+    }
+    mLabels._line.position=pos;
+    mLabels._line.label.text = `Jarak: ${(len/1000).toFixed(3)} km`;
+  }
+  function finishMeasureLine(){ if(mLinePositions.length<2) return; const len=measureLineLength(mLinePositions); addOrUpdateLineLabel(mLinePositions[mLinePositions.length-1], len); }
+  function addMeasurePolyVertex(cart){
+    mPolyPositions.push(cart);
+    if(!mPolyEntity){
+      mPolyEntity = measureLayer.add({
+        polygon:{ hierarchy:new Cesium.CallbackProperty(()=> new Cesium.PolygonHierarchy(mPolyPositions),false),
+                  material:Cesium.Color.fromCssColorString('#22c55e55'), outline:true, outlineColor:Cesium.Color.LIME },
+        properties: new Cesium.PropertyBag({ layer: LAYER.MEASURE })
+      });
+    }
+  }
+  function measurePolyAreaPerimeter(cartArray){
+    const cartos=cartArray.map(p=>Cesium.Cartographic.fromCartesian(p));
+    const centroidLon = cartos.reduce((s,c)=>s+Cesium.Math.toDegrees(c.longitude),0)/cartos.length;
+    const centroidLat = cartos.reduce((s,c)=>s+Cesium.Math.toDegrees(c.latitude),0)/cartos.length;
+    const cen=Cesium.Cartesian3.fromDegrees(centroidLon,centroidLat,0);
+    const enu=Cesium.Transforms.eastNorthUpToFixedFrame(cen);
+    const inv=Cesium.Matrix4.inverse(enu,new Cesium.Matrix4());
+    const pts=cartArray.map(p=>Cesium.Matrix4.multiplyByPoint(inv,p,new Cesium.Cartesian3()));
+    let area=0, perim=0;
+    for(let i=0;i<pts.length;i++){ const a=pts[i], b=pts[(i+1)%pts.length]; area += (a.x*b.y - b.x*a.y); perim += Math.hypot(b.x-a.x, b.y-a.y); }
+    area=Math.abs(area)/2; return {area, perim};
+  }
+  function addOrUpdatePolyLabel(pos, area, perim){
+    if(!mLabels._poly){
+      mLabels._poly=measureLayer.add({ position: pos,
+        label:{ text:'', font:'12px sans-serif', fillColor:Cesium.Color.WHITE, style:Cesium.LabelStyle.FILL_AND_OUTLINE, outlineWidth:3, pixelOffset:new Cesium.Cartesian2(0,-12) },
+        properties: new Cesium.PropertyBag({ layer: LAYER.MEASURE })
+      });
+      mLabels.push(mLabels._poly);
+    }
+    mLabels._poly.position=pos;
+    mLabels._poly.label.text = `Luas: ${area.toFixed(2)} m² (${(area/10000).toFixed(4)} ha)\nKeliling: ${perim.toFixed(2)} m`;
+  }
+  function finishMeasurePolygon(){ if(mPolyPositions.length<3) return; const {area, perim}=measurePolyAreaPerimeter(mPolyPositions); addOrUpdatePolyLabel(mPolyPositions[mPolyPositions.length-1], area, perim); }
+
+  if(btnMPoint) btnMPoint.addEventListener('click', ()=>{ setActiveBtn(btnMPoint); setMeasureMode('point'); });
+  if(btnMLine)  btnMLine .addEventListener('click', ()=>{ setActiveBtn(btnMLine ); setMeasureMode('line');  });
+  if(btnMPoly)  btnMPoly .addEventListener('click', ()=>{ setActiveBtn(btnMPoly ); setMeasureMode('polygon');});
+  if(btnMClear) btnMClear.addEventListener('click', ()=>{ setMeasureMode('none'); });
+
+  // ====== Draw input shared: klik kiri ======
   drawHandler.setInputAction((movement)=>{
-    if (drawModeSel.value==='none') return;
     const cartesian = viewer.scene.pickPosition(movement.position) ||
                       viewer.camera.pickEllipsoid(movement.position, Cesium.Ellipsoid.WGS84);
     if (!cartesian) return;
+
+    // Measure mode first
+    if (measureMode==='point') return addMeasurePoint(cartesian);
+    if (measureMode==='line')  return addMeasureLineVertex(cartesian);
+    if (measureMode==='polygon') return addMeasurePolyVertex(cartesian);
+
+    // Analysis drawing
+    if (drawModeSel.value==='none') return;
     const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(cartesian);
     drawPositions.push(Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, 0));
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-  // double click to finish & compute
-  drawHandler.setInputAction((movement)=>{
+  // ====== Double-click: selesaikan measure / analisis ======
+  drawHandler.setInputAction(()=>{
+    if (measureMode==='line') return finishMeasureLine();
+    if (measureMode==='polygon') return finishMeasurePolygon();
+
     if (drawModeSel.value==='line'){
       computeProfileFromLine();
     } else if (drawModeSel.value==='polygon'){
@@ -665,18 +835,72 @@
     return z0*(1-ty)+z1*ty;
   }
 
+  // ====== Data Manager ======
+  const dataList = $("dataList");
+  const features = []; // {id, type:'line'|'polygon', name, entities:Entity[]}
+  function addFeature(rec){ features.push(rec); renderDataList(); }
+  function removeFeature(id){
+    const i = features.findIndex(f=>f.id===id);
+    if (i>=0){
+      (features[i].entities||[]).forEach(ent=>viewer.entities.remove(ent));
+      features.splice(i,1); renderDataList();
+    }
+  }
+  function renderDataList(){
+    dataList.innerHTML = "";
+    if (!features.length){
+      dataList.innerHTML = "<div class='muted'>Belum ada fitur disimpan.</div>";
+      return;
+    }
+    for (const f of features){
+      const div = document.createElement("div");
+      div.className = "item";
+      div.innerHTML = `
+        <div><b>${f.type.toUpperCase()}</b><div class="meta">${f.name}</div></div>
+        <div class="stack">
+          <button data-act="zoom" data-id="${f.id}">Zoom</button>
+          <button data-act="del" data-id="${f.id}">Hapus</button>
+        </div>`;
+      dataList.appendChild(div);
+    }
+    dataList.querySelectorAll("button[data-act='del']").forEach(b=> b.onclick = ()=> removeFeature(b.dataset.id));
+    dataList.querySelectorAll("button[data-act='zoom']").forEach(b=> b.onclick = ()=>{
+      const f = features.find(x=>x.id===b.dataset.id); if(!f) return;
+      const pos = [];
+      f.entities.forEach(e=>{
+        if (e.polyline?.positions?.getValue){ pos.push(...e.polyline.positions.getValue(Cesium.JulianDate.now())); }
+        if (e.polygon?.hierarchy?.getValue){
+          const h = e.polygon.hierarchy.getValue(Cesium.JulianDate.now()); pos.push(...h.positions);
+        }
+      });
+      if (pos.length){
+        const bs = Cesium.BoundingSphere.fromPoints(pos);
+        viewer.camera.flyToBoundingSphere(bs, {duration:1});
+      }
+    });
+  }
+  function setEntitiesVisible(tag, visible){
+    viewer.entities.values.forEach(ent=>{
+      if (ent.properties && ent.properties.layer && ent.properties.layer.getValue() === tag){ ent.show = visible; }
+    });
+  }
+
+  // Layer toggles
+  lyPoints.addEventListener('change', ()=>{ pointLayer.show = lyPoints.checked; });
+  lyDTM.addEventListener('change',   ()=>{ if (dtmPrimitive) dtmPrimitive.show = lyDTM.checked; });
+  lyAnalLine.addEventListener('change', ()=> setEntitiesVisible(LAYER.ANAL_LINE, lyAnalLine.checked));
+  lyAnalPoly.addEventListener('change', ()=> setEntitiesVisible(LAYER.ANAL_POLY, lyAnalPoly.checked));
+  lyMeasure.addEventListener('change',  ()=> setEntitiesVisible(LAYER.MEASURE, lyMeasure.checked));
+
   // ==== Profil sepanjang garis ====
+  let profileState = null; // {cartos, segLen, total}
+  let profileMarker = null;
+
   function computeProfileFromLine(){
     if (!dtmMeta){ alert('Bangun DTM dulu.'); return; }
     if (drawPositions.length < 2){ alert('Gambar minimal dua titik untuk profil.'); return; }
     const samples = Math.max(50, Math.min(2000, parseInt(profileSamplesInp.value)||200));
-    // kumpulkan path (lon,lat)
-    const pts=[];
-    for (const p of drawPositions){
-      const c = Cesium.Cartographic.fromCartesian(p);
-      pts.push([Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)]);
-    }
-    // hitung panjang segmen
+
     const cartos = drawPositions.map(p=>Cesium.Cartographic.fromCartesian(p));
     const geod = new Cesium.EllipsoidGeodesic();
     const segLen=[];
@@ -685,15 +909,12 @@
       geod.setEndPoints(cartos[i], cartos[i+1]);
       const d=geod.surfaceDistance; segLen.push(d); total+=d;
     }
-    // sample sepanjang
     const xs=[], zs=[];
     for (let s=0;s<samples;s++){
       const dist = total * (s/(samples-1));
-      // cari segmen
       let acc=0, i=0;
       while (i<segLen.length && acc+segLen[i]<dist){ acc+=segLen[i]; i++; }
       const t = (segLen[i]===0)?0: (dist-acc)/segLen[i];
-      // interp cartographic
       const a = cartos[i], b = cartos[i+1];
       geod.setEndPoints(a,b);
       const carto = geod.interpolateUsingSurfaceDistance(segLen[i]*t);
@@ -703,25 +924,40 @@
       xs.push(dist); zs.push(z);
     }
     drawProfile(xs, zs);
+
+    // Simpan state untuk hover sinkron
+    profileState = { cartos, segLen, total };
+    if (!profileMarker){
+      profileMarker = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(0,0,0),
+        point: { pixelSize: 10, color: Cesium.Color.YELLOW, outlineColor: Cesium.Color.BLACK, outlineWidth: 2 },
+        show: false,
+        properties: new Cesium.PropertyBag({ layer: LAYER.ANAL_LINE })
+      });
+    }
+
+    // Tag & simpan garis aktif jadi fitur
+    if (activePolyline){
+      activePolyline.properties = new Cesium.PropertyBag({ layer: LAYER.ANAL_LINE });
+      const id = uid();
+      addFeature({ id, type:'line', name:`Profil ${new Date().toLocaleString()}`, entities:[activePolyline] });
+      activePolyline = null; // supaya sesi berikutnya bikin baru
+    }
   }
 
   function drawProfile(xs, zs){
-    // stats
-    const zmin = Math.min(...zs.filter(v=>v!=null));
-    const zmax = Math.max(...zs.filter(v=>v!=null));
-    const len  = xs[xs.length-1];
-    // plot ke canvas
     const cv = profileCanvas, ctx=cv.getContext('2d');
+    const zVals = zs.filter(v=>v!=null);
+    const zmin = Math.min(...zVals), zmax = Math.max(...zVals);
+    const len  = xs[xs.length-1];
+
     ctx.clearRect(0,0,cv.width,cv.height);
-    // axes
     ctx.strokeStyle="#3b82f6"; ctx.lineWidth=1;
     ctx.strokeRect(36,10,cv.width-46,cv.height-36);
-    // map x->px, z->py
-    const px = d => 36 + d/len*(cv.width-46);
-    const py = z => {
-      const t=(z - zmin)/Math.max(1e-9,(zmax - zmin));
-      return 10 + (1-t)*(cv.height-36);
-    };
+
+    const px = d => 36 + d/Math.max(1e-9,len)*(cv.width-46);
+    const py = z => 10 + (1 - ( (z - zmin)/Math.max(1e-9,(zmax-zmin)) ))*(cv.height-36);
+
     // grid
     ctx.strokeStyle="#223055"; ctx.lineWidth=1;
     for(let i=1;i<=4;i++){
@@ -740,21 +976,40 @@
     // labels
     ctx.fillStyle="#eaeef6"; ctx.font="11px system-ui";
     ctx.fillText(`0 m`, 36, cv.height-8);
-    ctx.textAlign="right";
-    ctx.fillText(`${len.toFixed(1)} m`, cv.width-12, cv.height-8);
-    ctx.textAlign="left";
-    ctx.fillText(`z[min,max]=[${zmin.toFixed(2)}, ${zmax.toFixed(2)}] m`, 40, 22);
+    ctx.textAlign="right"; ctx.fillText(`${len.toFixed(1)} m`, cv.width-12, cv.height-8);
+    ctx.textAlign="left";  ctx.fillText(`z[min,max]=[${zmin.toFixed(2)}, ${zmax.toFixed(2)}] m`, 40, 22);
 
     profileBox.style.display='block';
     profileStats.innerHTML = `Panjang: <b>${(len/1000).toFixed(3)} km</b> · Zmin: <b>${zmin.toFixed(2)} m</b> · Zmax: <b>${zmax.toFixed(2)} m</b>`;
   }
+
+  // Hover chart → marker di peta
+  profileCanvas.addEventListener('mousemove', (ev)=>{
+    if (!profileState) return;
+    const rect = profileCanvas.getBoundingClientRect();
+    const x = ev.clientX - rect.left;
+    const leftPad = 36, rightPad = 10;
+    const width = profileCanvas.width - (leftPad + rightPad);
+    const t = Math.max(0, Math.min(1, (x - leftPad) / width));
+    const dist = profileState.total * t;
+    let acc=0, i=0;
+    while (i<profileState.segLen.length && acc+profileState.segLen[i] < dist){ acc+=profileState.segLen[i]; i++; }
+    const segL = profileState.segLen[i]||0;
+    const tt = segL ? (dist - acc)/segL : 0;
+    const geod = new Cesium.EllipsoidGeodesic();
+    const a = profileState.cartos[i], b = profileState.cartos[i+1] || profileState.cartos[i];
+    geod.setEndPoints(a,b);
+    const c = geod.interpolateUsingSurfaceDistance(segL*tt);
+    const pos = Cesium.Cartesian3.fromRadians(c.longitude, c.latitude, 0);
+    if (profileMarker){ profileMarker.position = pos; profileMarker.show = lyAnalLine.checked; }
+  });
+  profileCanvas.addEventListener('mouseleave', ()=>{ if (profileMarker) profileMarker.show=false; });
 
   // ==== Area & Volume dari poligon ====
   function computeAreaVolumeFromPolygon(){
     if (!dtmMeta){ alert('Bangun DTM dulu.'); return; }
     if (drawPositions.length < 3){ alert('Gambar minimal tiga titik untuk poligon.'); return; }
 
-    // vertices lon/lat
     const verts = drawPositions.map(p=>{
       const c=Cesium.Cartographic.fromCartesian(p);
       return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
@@ -772,6 +1027,7 @@
       return Cesium.Matrix4.multiplyByPoint(inv, cart, new Cesium.Cartesian3());
     }
     const enPts = verts.map(lonlatToEN);
+
     // shoelace
     let area=0;
     for (let i=0;i<enPts.length;i++){
@@ -784,7 +1040,6 @@
     const {minLon,minLat,stepDeg,nx,ny,zGrid} = dtmMeta;
     const ref = Number(refElevInp.value)||0;
 
-    // helper: point in polygon (ray casting) untuk lon/lat
     function pointInPoly(lon,lat){
       let inside=false;
       for (let i=0,j=verts.length-1;i<verts.length;j=i++){
@@ -796,11 +1051,9 @@
       return inside;
     }
 
-    // loop grid cell center
     let volume=0, coveredArea=0, count=0;
     for (let j=0;j<ny;j++){
       const lat = minLat + j*stepDeg;
-      // konversi step deg ke meter, approx
       const latMeters = 111320 * stepDeg;
       const lonMeters = 111320 * Math.cos(lat*Math.PI/180) * stepDeg;
       const cellArea = latMeters * lonMeters;
@@ -822,9 +1075,90 @@
       <div><b>Volume (z > ${ref.toFixed(2)} m)</b>: ${(volume).toFixed(2)} m³</div>
       <div class="muted">Sel terhitung: ${count.toLocaleString()} | Step: ${ (dtmMeta.stepDeg).toFixed(6)}°</div>
     `;
+
+    // Tag & simpan polygon
+    if (activePolygon){
+      activePolygon.properties = new Cesium.PropertyBag({ layer: LAYER.ANAL_POLY });
+      const id = uid();
+      addFeature({ id, type:'polygon', name:`Volume ${new Date().toLocaleString()}`, entities:[activePolygon] });
+      activePolygon = null;
+    }
   }
 
-})();
-</script>
+  // ====== Export PDF ======
+  btnExport.addEventListener('click', async ()=>{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+
+    const addTitle = (t)=>{ doc.setFontSize(16); doc.setTextColor(20,20,20); doc.text(t, margin, 18); doc.setFontSize(11); };
+
+    // Cover
+    addTitle("Laporan Analisis — Poseidon WebGIS");
+    doc.setFontSize(11);
+    const now = new Date();
+    doc.text(`Tanggal: ${now.toLocaleString()}`, margin, 26);
+    doc.text(`Jumlah titik: ${lonlatz.length.toLocaleString()}`, margin, 32);
+    if (zStats) doc.text(`Z[min,max]: ${zStats.min?.toFixed(2)} – ${zStats.max?.toFixed(2)} m`, margin, 38);
+    doc.text(`Grid Step: ${gridStepInp.value}°  |  Bins: ${binsInp.value}`, margin, 44);
+
+    // Snapshot peta (ambil canvas Cesium)
+    try{
+      const canvas = viewer.scene.canvas;
+      const dataUrl = canvas.toDataURL("image/png");
+      // Hitung ukuran proporsional
+      const imgW = pageW - margin*2;
+      const imgH = imgW * 9/16; // kira2
+      doc.addImage(dataUrl, 'PNG', margin, 52, imgW, imgH);
+      doc.setDrawColor(160); doc.rect(margin, 52, imgW, imgH);
+    }catch(e){
+      doc.text('Snapshot peta tidak tersedia.', margin, 52);
+    }
+
+    // Halaman 2: Profil & Statistik
+    doc.addPage();
+    addTitle('Profil Garis & Statistik');
+    // Profil chart (canvas to image)
+    if (profileBox.style.display !== 'none'){
+      try{
+        const url = profileCanvas.toDataURL('image/png');
+        const imgW = pageW - margin*2;
+        const imgH = imgW * (profileCanvas.height/profileCanvas.width);
+        doc.addImage(url, 'PNG', margin, 28, imgW, imgH);
+        doc.text(profileStats.textContent.replace(/·/g,'-'), margin, 28 + imgH + 8);
+      }catch(e){
+        doc.text('Grafik profil tidak tersedia.', margin, 28);
+      }
+    } else {
+      doc.text('Belum ada profil yang dihitung.', margin, 28);
+    }
+
+    // Halaman 3: Volume & Data Manager
+    doc.addPage();
+    addTitle('Luas / Volume & Item Analisis');
+    const textLines = [];
+    if (polyStats.style.display !== 'none'){
+      textLines.push("Ringkasan Poligon:");
+      textLines.push(polyStats.innerText);
+      textLines.push("");
+    }
+    if (features.length){
+      textLines.push("Daftar Fitur Disimpan:");
+      features.forEach((f,idx)=> textLines.push(`${idx+1}. [${f.type.toUpperCase()}] ${f.name}`));
+    } else {
+      textLines.push("Belum ada fitur disimpan.");
+    }
+    doc.setFontSize(11);
+    doc.text(textLines, margin, 28);
+
+    // Simpan
+    doc.save(`Poseidon_Report_${now.toISOString().slice(0,10)}.pdf`);
+  });
+
+  // ====== Layer toggles sinkron awal ======
+  pointLayer.show = lyPoints.checked;
+
+})();</script>
 </body>
 </html>
